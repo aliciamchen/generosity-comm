@@ -94,13 +94,15 @@ if (params.condition == "vary_beta") {
       params.comm_weight.toFixed(1) +
       ".csv"
   );
-  csv.writeLine("beta,comm_weight,first_action,p_alternation", f);
+  csv.writeLine("beta,comm_weight,first_action,p_own,p_other,p_alternation", f);
 
   csv.writeLine(
     [
       params.beta,
       params.comm_weight,
       "own",
+      Math.exp(communicative_speaker("coffee", "own", 0.5).score("own")),
+      Math.exp(communicative_speaker("coffee", "own", 0.5).score("other")),
       Math.exp(communicative_speaker("coffee", "own", 0.5).score("other")),
     ].join(","),
     f
@@ -111,6 +113,8 @@ if (params.condition == "vary_beta") {
       params.beta,
       params.comm_weight,
       "other",
+      Math.exp(communicative_speaker("coffee", "other", 0.5).score("own")),
+      Math.exp(communicative_speaker("coffee", "other", 0.5).score("other")),
       Math.exp(communicative_speaker("coffee", "other", 0.5).score("own")),
     ].join(","),
     f
@@ -129,7 +133,10 @@ if (params.condition == "vary_base_weights") {
       params.comm_weight.toFixed(1) +
       ".csv"
   );
-  csv.writeLine("beta,comm_weight,first_action,w_other,p_alternation", f);
+  csv.writeLine(
+    "beta,comm_weight,first_action,w_other,p_own,p_other,p_alternation",
+    f
+  );
 
   map(
     function (w_other) {
@@ -142,13 +149,19 @@ if (params.condition == "vary_base_weights") {
           Math.exp(
             communicative_speaker("coffee", "other", w_other).score("own")
           ),
+          Math.exp(
+            communicative_speaker("coffee", "other", w_other).score("other")
+          ),
+          Math.exp(
+            communicative_speaker("coffee", "other", w_other).score("own")
+          ),
         ].join(","),
         f
       );
     },
     map(function (x) {
       round(x, 2);
-    }, _.range(0, 1, 0.1))
+    }, _.range(0, 1.1, 0.1))
   );
 
   map(
@@ -160,6 +173,12 @@ if (params.condition == "vary_base_weights") {
           "own",
           w_other,
           Math.exp(
+            communicative_speaker("coffee", "own", w_other).score("own")
+          ),
+          Math.exp(
+            communicative_speaker("coffee", "own", w_other).score("other")
+          ),
+          Math.exp(
             communicative_speaker("coffee", "own", w_other).score("other")
           ),
         ].join(","),
@@ -168,7 +187,7 @@ if (params.condition == "vary_base_weights") {
     },
     map(function (x) {
       round(x, 2);
-    }, _.range(0, 1, 0.1))
+    }, _.range(0, 1.1, 0.1))
   );
 
   csv.close(f);

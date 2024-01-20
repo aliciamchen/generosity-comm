@@ -50,10 +50,10 @@ d.base.weights <- read.csv(here("model/output/combined_base_weights.csv"))
 
 f <-
   ggplot(
-    data = d.base.weights %>% filter(first_action == "other"),
+    data = d.base.weights, #%>% filter(first_action == "other"),
     aes(
       x = w_other,
-      y = p_alternation,
+      y = p_own,
       col = comm_weight, 
       group = comm_weight
     )
@@ -61,9 +61,28 @@ f <-
   geom_point(size = 2) +
   geom_path(size = 1, alpha = 0.7) +
   scale_color_viridis_c( direction = -1) +
-  # facet_grid(~ first_action, labeller = label_parsed) +
-  labs(x = "weight on other", y = "P(own generous)", title = "first action other generous")
+  facet_grid(~ first_action, labeller = label_parsed) +
+  labs(x = "weight on other", y = "P(own generous) second action", title = "p(own) faceted by first action")
 
 f
+
+f <-
+  ggplot(
+    data = d.base.weights, #%>% filter(first_action == "other"),
+    aes(
+      x = w_other,
+      y = p_other,
+      col = comm_weight, 
+      group = comm_weight
+    )
+  ) +
+  geom_point(size = 2) +
+  geom_path(size = 1, alpha = 0.7) +
+  scale_color_viridis_c( direction = -1) +
+  facet_grid(~ first_action, labeller = label_parsed) +
+  labs(x = "weight on other", y = "P(other generous) second action", title = "p(other) faceted by first action")
+
+f
+
 
 
