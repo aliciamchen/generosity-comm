@@ -6,11 +6,16 @@ var params = {
   beta: argv.beta,
   actions: ["own", "other"],
   comm_weight: argv.comm_weight,
+  equality_cost: argv.equality_cost,
   condition: argv.condition, // either vary_base_weights or vary_beta
   w_other_values: map(function (x) {
     round(x, 2);
   }, _.range(0, 1, 0.01)),
 };
+
+var getOpposite = function (action) {
+  return action == "own" ? "other" : "own";
+}
 
 var benefits = function (scenario) {
   var scenario_benefits = {
@@ -36,29 +41,49 @@ var getActionBenefits = function (scenario, action, w_other) {
   }
 };
 
-var base_speaker = function (scenario, past_action, w_other) {
+var getCumulativeActionBenefits = function (scenario, actions, w_other) {
+  return reduce(
+    function (a, b) {
+      return a + b;
+    },
+    0,
+    map(function (action) {
+      return getActionBenefits(scenario, action, w_other);
+    }, actions)
+  );
+}
+
+var getEqualityCost = function(scenario, past_actions, action, equality_cost_weight) {
+  var speakerTotalBenefit = getCumulativeActionBenefits(scenario, past_actions, 0) + benefits(scenario)[action];
+  var listenerTotalBenefit = getCumulativeActionBenefits(scenario, map(function(a) {return getOpposite(a)}, past_actions), 0) + benefits(scenario)[getOpposite(action)];
+  return equality_cost_weight * Math.abs(speakerTotalBenefit - listenerTotalBenefit);
+}
+
+
+var base_speaker = function (scenario, past_actions, w_other, equality_cost_weight) {
   return Infer({ method: "enumerate" }, function () {
     var action = uniformDraw(params.actions); // "own" or "other", "own" means that the actor is generous
 
-    var getUtility = function (past_action, action) {
+    var getUtility = function (past_actions, action) {
       return (
-        getActionBenefits(scenario, past_action, w_other) +
-        getActionBenefits(scenario, action, w_other)
+        getActionBenefits(scenario, past_actions, w_other) +
+        getActionBenefits(scenario, action, w_other) -
+        getEqualityCost(scenario, past_actions, action, equality_cost_weight)
       );
     };
 
-    factor(params.beta * getUtility(action));
+    factor(params.beta * getUtility(past_actions, action));
     return action;
   });
 };
 
-var base_listener = function (scenario, past_action, speaker_action) {
+var base_listener = function (scenario, past_actions, speaker_action, equality_cost_weight) {
   return Infer({ method: "enumerate" }, function () {
     var w_other = uniformDraw(params.w_other_values);
     var getUtility = function () {
       return (
-        base_speaker(scenario, past_action, w_other).score(speaker_action) +
-        getActionBenefits(scenario, past_action, w_other)
+        base_speaker(scenario, past_actions, w_other, equality_cost_weight).score(speaker_action) +
+        getCumulativeActionBenefits(scenario, past_actions, w_other)
       );
     };
     factor(params.beta * getUtility());
@@ -66,16 +91,17 @@ var base_listener = function (scenario, past_action, speaker_action) {
   });
 };
 
-var communicative_speaker = function (scenario, past_action, w_other) {
+var communicative_speaker = function (scenario, past_actions, w_other, equality_cost_weight, comm_weight) {
   return Infer({ method: "enumerate" }, function () {
     var action = uniformDraw(params.actions); // "own" or "other", "own" means that the actor is generous
 
     var getUtility = function (action) {
-      var surprisal = base_listener(scenario, past_action, action).score(0.5); // communicate equal weights
+      var surprisal = base_listener(scenario, past_actions, action, equality_cost_weight).score(0.5); // communicate equal weights
       return (
-        getActionBenefits(scenario, past_action, w_other) +
-        getActionBenefits(scenario, action, w_other) +
-        params.comm_weight * surprisal
+        getCumulativeActionBenefits(scenario, past_actions, w_other) +
+        getActionBenefits(scenario, action, w_other) -
+        getEqualityCost(scenario, past_actions, action, equality_cost_weight) +
+        comm_weight * surprisal
       );
     };
 
