@@ -6,11 +6,13 @@ var params = {
   beta: argv.beta,
   actions: ["own", "other"],
   comm_weight: argv.comm_weight,
-  equality_cost: argv.equality_cost,
+  fairness_cost: argv.fairness_weight,
   condition: argv.condition, // either vary_base_weights or vary_beta
   w_other_values: map(function (x) {
     round(x, 2);
   }, _.range(0, 1, 0.01)),
+  n_rounds: 20,
+  participants: 100
 };
 
 var getOpposite = function (action) {
@@ -56,7 +58,8 @@ var getCumulativeActionBenefits = function (scenario, actions, w_other) {
 var getEqualityCost = function(scenario, past_actions, action, equality_cost_weight) {
   var speakerTotalBenefit = getCumulativeActionBenefits(scenario, past_actions, 0) + benefits(scenario)[action];
   var listenerTotalBenefit = getCumulativeActionBenefits(scenario, map(function(a) {return getOpposite(a)}, past_actions), 0) + benefits(scenario)[getOpposite(action)];
-  return equality_cost_weight * Math.abs(speakerTotalBenefit - listenerTotalBenefit);
+  var cost = (speakerTotalBenefit - listenerTotalBenefit) > 0 ? (speakerTotalBenefit - listenerTotalBenefit) : 0;
+  return equality_cost_weight * cost;
 }
 
 
@@ -66,7 +69,7 @@ var base_speaker = function (scenario, past_actions, w_other, equality_cost_weig
 
     var getUtility = function (past_actions, action) {
       return (
-        getActionBenefits(scenario, past_actions, w_other) +
+        // getActionBenefits(scenario, past_actions, w_other) +
         getActionBenefits(scenario, action, w_other) -
         getEqualityCost(scenario, past_actions, action, equality_cost_weight)
       );
@@ -86,7 +89,7 @@ var base_listener = function (scenario, past_actions, speaker_action, equality_c
         getCumulativeActionBenefits(scenario, past_actions, w_other)
       );
     };
-    factor(params.beta * getUtility());
+    factor(getUtility());
     return w_other;
   });
 };
@@ -98,7 +101,7 @@ var communicative_speaker = function (scenario, past_actions, w_other, equality_
     var getUtility = function (action) {
       var surprisal = base_listener(scenario, past_actions, action, equality_cost_weight).score(0.5); // communicate equal weights
       return (
-        getCumulativeActionBenefits(scenario, past_actions, w_other) +
+        // getCumulativeActionBenefits(scenario, past_actions, w_other) +
         getActionBenefits(scenario, action, w_other) -
         getEqualityCost(scenario, past_actions, action, equality_cost_weight) +
         comm_weight * surprisal
@@ -149,6 +152,49 @@ if (params.condition == "vary_beta") {
   csv.close(f);
 }
 
+if (params.condition == "fairness_comm") {
+  // Fairness cost, communication weight
+  var f = csv.open(
+    "./output/fairness_comm/" +
+      "beta" +
+      params.beta +
+      "_fw" +
+      params.fairness_cost.toFixed(2) +
+      "_cw" +
+      params.comm_weight.toFixed(2) +
+      ".csv"
+  );
+  csv.writeLine("beta,comm_weight,fairness_weight,first_action,p_own,p_other,p_alternation", f);
+
+  csv.writeLine(
+    [
+      params.beta,
+      params.comm_weight,
+      params.fairness_cost,
+      "own",
+      Math.exp(communicative_speaker("coffee", ["own"], 0.5, params.fairness_cost, params.comm_weight).score("own")),
+      Math.exp(communicative_speaker("coffee", ["own"], 0.5, params.fairness_cost, params.comm_weight).score("other")),
+      Math.exp(communicative_speaker("coffee", ["own"], 0.5, params.fairness_cost, params.comm_weight).score("other")),
+    ].join(","),
+    f
+  );
+
+  csv.writeLine(
+    [
+      params.beta,
+      params.comm_weight,
+      params.fairness_cost,
+      "other",
+      Math.exp(communicative_speaker("coffee", ["other"], 0.5, params.fairness_cost, params.comm_weight).score("own")),
+      Math.exp(communicative_speaker("coffee", ["other"], 0.5, params.fairness_cost, params.comm_weight).score("other")),
+      Math.exp(communicative_speaker("coffee", ["other"], 0.5, params.fairness_cost, params.comm_weight).score("own")),
+    ].join(","),
+    f
+  );
+
+  csv.close(f);
+}
+
 if (params.condition == "vary_base_weights") {
   // vary speaker's weight on listener's utility, and also weight on surprisal
   var f = csv.open(
@@ -160,7 +206,7 @@ if (params.condition == "vary_base_weights") {
       ".csv"
   );
   csv.writeLine(
-    "beta,comm_weight,first_action,w_other,p_own,p_other,p_alternation",
+    "beta,fairness_weight,comm_weight,first_action,w_other,p_own,p_other,p_alternation",
     f
   );
 
@@ -169,17 +215,18 @@ if (params.condition == "vary_base_weights") {
       csv.writeLine(
         [
           params.beta,
+          params.fairness_cost,
           params.comm_weight,
           "other",
           w_other,
           Math.exp(
-            communicative_speaker("coffee", "other", w_other).score("own")
+            communicative_speaker("coffee", ["other"], w_other, params.fairness_cost, params.comm_weight).score("own")
           ),
           Math.exp(
-            communicative_speaker("coffee", "other", w_other).score("other")
+            communicative_speaker("coffee", ["other"], w_other, params.fairness_cost, params.comm_weight).score("other")
           ),
           Math.exp(
-            communicative_speaker("coffee", "other", w_other).score("own")
+            communicative_speaker("coffee", ["other"], w_other, params.fairness_cost, params.comm_weight).score("own")
           ),
         ].join(","),
         f
@@ -195,17 +242,18 @@ if (params.condition == "vary_base_weights") {
       csv.writeLine(
         [
           params.beta,
+          params.fairness_cost,
           params.comm_weight,
           "own",
           w_other,
           Math.exp(
-            communicative_speaker("coffee", "own", w_other).score("own")
+            communicative_speaker("coffee", ["own"], w_other, params.fairness_cost, params.comm_weight).score("own")
           ),
           Math.exp(
-            communicative_speaker("coffee", "own", w_other).score("other")
+            communicative_speaker("coffee", ["own"], w_other, params.fairness_cost, params.comm_weight).score("other")
           ),
           Math.exp(
-            communicative_speaker("coffee", "own", w_other).score("other")
+            communicative_speaker("coffee", ["own"], w_other, params.fairness_cost, params.comm_weight).score("other")
           ),
         ].join(","),
         f
@@ -217,4 +265,156 @@ if (params.condition == "vary_base_weights") {
   );
 
   csv.close(f);
+}
+
+
+if (params.condition == "vary_base_weights_fairness") {
+  // vary speaker's weight on listener's utility, and also weight on fairness
+  var f = csv.open(
+    "./output/vary_base_weights_fairness/" +
+      "beta" +
+      params.beta +
+      "_fw" +
+      params.fairness_cost.toFixed(2) +
+      ".csv"
+  );
+  csv.writeLine(
+    "beta,fairness_weight,comm_weight,first_action,w_other,p_own,p_other,p_alternation",
+    f
+  );
+
+  map(
+    function (w_other) {
+      csv.writeLine(
+        [
+          params.beta,
+          params.fairness_cost,
+          params.comm_weight,
+          "other",
+          w_other,
+          Math.exp(
+            communicative_speaker("coffee", ["other"], w_other, params.fairness_cost, params.comm_weight).score("own")
+          ),
+          Math.exp(
+            communicative_speaker("coffee", ["other"], w_other, params.fairness_cost, params.comm_weight).score("other")
+          ),
+          Math.exp(
+            communicative_speaker("coffee", ["other"], w_other, params.fairness_cost, params.comm_weight).score("own")
+          ),
+        ].join(","),
+        f
+      );
+    },
+    map(function (x) {
+      round(x, 2);
+    }, _.range(0, 1.1, 0.1))
+  );
+
+  map(
+    function (w_other) {
+      csv.writeLine(
+        [
+          params.beta,
+          params.fairness_cost,
+          params.comm_weight,
+          "own",
+          w_other,
+          Math.exp(
+            communicative_speaker("coffee", ["own"], w_other, params.fairness_cost, params.comm_weight).score("own")
+          ),
+          Math.exp(
+            communicative_speaker("coffee", ["own"], w_other, params.fairness_cost, params.comm_weight).score("other")
+          ),
+          Math.exp(
+            communicative_speaker("coffee", ["own"], w_other, params.fairness_cost, params.comm_weight).score("other")
+          ),
+        ].join(","),
+        f
+      );
+    },
+    map(function (x) {
+      round(x, 2);
+    }, _.range(0, 1.1, 0.1))
+  );
+
+  csv.close(f);
+}
+
+if (params.condition == "sequential") {
+
+  var condition_names = ["fairness_only", "comm_only", "fairness_comm", "base"]
+  var conditions = {
+    "fairness_only": {fairness_cost: 0.5, comm_weight: 0},
+    "comm_only": {fairness_cost: 0, comm_weight: 1},
+    "fairness_comm": {fairness_cost: 0.5, comm_weight: 1},
+    "base": {fairness_cost: 0, comm_weight: 0}
+  }
+
+  var run = function (scenario, condition, dataSoFar) {
+
+    var next_action = sample(communicative_speaker(scenario, dataSoFar.actions, 0.5, conditions[condition].fairness_cost, conditions[condition].comm_weight));
+    var p_alternation = communicative_speaker(scenario, dataSoFar.actions, 0.5, conditions[condition].fairness_cost, conditions[condition].comm_weight).score(getOpposite(dataSoFar.actions[dataSoFar.actions.length - 1]));
+    var newDataSoFar = {
+      actions: dataSoFar.actions.concat(next_action),
+      p_alternation: dataSoFar.p_alternation.concat(Math.exp(p_alternation)) // TOOD: maybe add p_own and p_other
+    };
+
+    if (dataSoFar.actions.length < params.n_rounds) {
+      return run(scenario, condition, newDataSoFar);
+    } else {
+      return {
+        data: newDataSoFar,
+        scenario: scenario
+      };
+    };
+  };
+
+  var f = csv.open("output_sequential.csv");
+  csv.writeLine(
+    "participant_num,condition,beta,fairness_weight,comm_weight,w_other,round,action,p_alternation",
+    f
+  );
+
+  var writeData = function (participant_num, condition, run_output) {
+    mapN(function (i) {
+      // console.log(run_output.alice_actions)
+      // console.log(run_output)
+      csv.writeLine(
+        [participant_num,
+          condition,
+          params.beta,
+          conditions[condition].fairness_cost,
+          conditions[condition].comm_weight,
+          0.5,
+          i,
+          run_output.data.actions[i],
+          run_output.data.p_alternation[i],
+        ].join(","),
+        f
+      );
+    }, params.n_rounds + 1);
+  };
+
+  var simulate = function (participant_num, condition) {
+  //   console.log(condition)
+    var run_output = run("coffee", condition, {
+      actions: ['other'],
+      p_alternation: ['NA']
+    });
+  //   console.log(run_output)
+    writeData(participant_num, condition, run_output);
+  };
+
+  var simulateAll = function (participants) {
+      mapN(function (participant_num) {
+          console.log("participant " + participant_num)
+          map(function (condition) {
+              simulate(participant_num, condition);
+          }, condition_names);
+      }, participants);
+  }
+
+  simulateAll(params.participants);
+
+  csv.close(f)
 }
