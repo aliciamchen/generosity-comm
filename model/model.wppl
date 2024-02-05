@@ -15,6 +15,18 @@ var params = {
   participants: 100
 };
 
+var Beta_disc = cache(function (hypers) {
+  return Infer({ method: 'enumerate' }, function () {
+      var n = uniformDraw(_.range(0, 1, 0.01));
+      var bta = Beta({
+          a: hypers.a == 0 ? 1 : hypers.a,
+          b: hypers.b == 0 ? 1 : hypers.b
+      });
+      factor(bta.score(n));
+      return round(n, 2);
+  })
+});
+
 var getOpposite = function (action) {
   return action == "own" ? "other" : "own";
 }
@@ -58,7 +70,7 @@ var getCumulativeActionBenefits = function (scenario, actions, w_other) {
 var getEqualityCost = function(scenario, past_actions, action, equality_cost_weight) {
   var speakerTotalBenefit = getCumulativeActionBenefits(scenario, past_actions, 0) + benefits(scenario)[action];
   var listenerTotalBenefit = getCumulativeActionBenefits(scenario, map(function(a) {return getOpposite(a)}, past_actions), 0) + benefits(scenario)[getOpposite(action)];
-  var cost = (speakerTotalBenefit - listenerTotalBenefit) > 0 ? (speakerTotalBenefit - listenerTotalBenefit) : 0;
+  var cost = Math.abs(speakerTotalBenefit - listenerTotalBenefit)// (speakerTotalBenefit - listenerTotalBenefit) > 0 ? (speakerTotalBenefit - listenerTotalBenefit) : 0;
   return equality_cost_weight * cost;
 }
 
@@ -82,7 +94,7 @@ var base_speaker = function (scenario, past_actions, w_other, equality_cost_weig
 
 var base_listener = function (scenario, past_actions, speaker_action, equality_cost_weight) {
   return Infer({ method: "enumerate" }, function () {
-    var w_other = uniformDraw(params.w_other_values);
+    var w_other = sample(Beta_disc({a: 1, b: 2}))// uniformDraw(params.w_other_values);
     var getUtility = function () {
       return (
         base_speaker(scenario, past_actions, w_other, equality_cost_weight).score(speaker_action) +
@@ -198,7 +210,7 @@ if (params.condition == "fairness_comm") {
 if (params.condition == "vary_base_weights") {
   // vary speaker's weight on listener's utility, and also weight on surprisal
   var f = csv.open(
-    "./output/vary_base_weights/" +
+    "./output/vary_base_weights/" + // implement vary beta prior logic
       "beta" +
       params.beta +
       "_cw" +
