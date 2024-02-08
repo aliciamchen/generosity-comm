@@ -2,7 +2,8 @@
 .Rhistory
 .DS_Store
 .Rproj.user
-.Rproj
+*.Rproj
+*.ipynb
 non_anonymized
 raw
 pilots
